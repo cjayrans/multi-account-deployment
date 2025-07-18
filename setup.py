@@ -12,7 +12,8 @@ with open("README.md", "r") as f:
     readme = f.read()
 
 
-required_packages = ["sagemaker==2.93.0"]
+required_packages = ["sagemaker>=2.248.1",
+                     "boto3>=1.34.0"]
 extras = {
     "test": [
         "black",
@@ -31,14 +32,14 @@ setuptools.setup(
     description=about["__description__"],
     version=about["__version__"],
     author=about["__author__"],
-    author_email=["__author_email__"],
+    author_email="__author_email__",
     long_description=readme,
     long_description_content_type="text/markdown",
     url=about["__url__"],
     license=about["__license__"],
     packages=setuptools.find_packages(),
     include_package_data=True,
-    python_requires=">=3.6",
+    python_requires=">=3.12",
     install_requires=required_packages,
     extras_require=extras,
     entry_points={
@@ -53,8 +54,6 @@ setuptools.setup(
         "Natural Language :: English",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.12",
     ],
 )
