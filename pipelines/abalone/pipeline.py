@@ -50,6 +50,11 @@ from sagemaker.workflow.pipeline_context import PipelineSession
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
+def get_default_bucket(region):
+    boto_session = boto3.Session(region_name=region)
+    sm_session = sagemaker.session.Session(boto_session=boto_session)
+    return sm_session.default_bucket()
+
 def get_sagemaker_client(region):
      """Gets the sagemaker client.
 
@@ -65,7 +70,7 @@ def get_sagemaker_client(region):
      return sagemaker_client
 
 
-def get_session(region, default_bucket):
+def get_session(region, default_bucket=None):
     """Gets the sagemaker session based on the region.
 
     Args:
@@ -80,6 +85,10 @@ def get_session(region, default_bucket):
 
     sagemaker_client = boto_session.client("sagemaker")
     runtime_client = boto_session.client("sagemaker-runtime")
+
+    if default_bucket is None:
+        default_bucket = get_default_bucket(region)
+
     return sagemaker.session.Session(
         boto_session=boto_session,
         sagemaker_client=sagemaker_client,
@@ -87,7 +96,7 @@ def get_session(region, default_bucket):
         default_bucket=default_bucket,
     )
 
-def get_pipeline_session(region, default_bucket):
+def get_pipeline_session(region, default_bucket=None):
     """Gets the pipeline session based on the region.
 
     Args:
@@ -100,6 +109,9 @@ def get_pipeline_session(region, default_bucket):
 
     boto_session = boto3.Session(region_name=region)
     sagemaker_client = boto_session.client("sagemaker")
+
+    if default_bucket is None:
+        default_bucket = get_default_bucket(region)
 
     return PipelineSession(
         boto_session=boto_session,
@@ -154,7 +166,8 @@ def get_pipeline(
     )
     input_data = ParameterString(
         name="InputDataUrl",
-        default_value=f"s3://sagemaker-servicecatalog-seedcode-{region}/dataset/abalone-dataset.csv",
+        default_value=f"s3://{sagemaker_session.default_bucket()}/datasets/abalone.csv",
+
     )
 
     # processing step for feature engineering
