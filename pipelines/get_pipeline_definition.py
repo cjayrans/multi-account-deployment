@@ -27,6 +27,7 @@ def main():  # pragma: no cover
     """
     parser = argparse.ArgumentParser("Gets the pipeline definition for the pipeline script.")
 
+
     parser.add_argument(
         "-n",
         "--module-name",
