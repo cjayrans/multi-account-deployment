@@ -69,7 +69,6 @@ def get_sagemaker_client(region):
      sagemaker_client = boto_session.client("sagemaker")
      return sagemaker_client
 
-
 def get_session(region, default_bucket=None):
     """Gets the sagemaker session based on the region.
 
