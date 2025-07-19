@@ -55,7 +55,6 @@ def get_default_bucket(region):
     sm_session = sagemaker.session.Session(boto_session=boto_session)
     return sm_session.default_bucket()
 
-
 def get_sagemaker_client(region):
      """Gets the sagemaker client.
 
