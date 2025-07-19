@@ -7,7 +7,7 @@ on:
       - pipelines/**
 env:
   AWS_REGION: us-east-1
-  SAGEMAKER_PROJECT_NAME: multi-account-test-deployment-v10
+  SAGEMAKER_PROJECT_NAME: mlops-abalone-v1
 
 jobs:
   Build:
