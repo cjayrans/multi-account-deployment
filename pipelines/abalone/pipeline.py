@@ -163,6 +163,7 @@ def get_pipeline(
     model_approval_status = ParameterString(
         name="ModelApprovalStatus", default_value="PendingManualApproval"
     )
+
     input_data = ParameterString(
         name="InputDataUrl",
         default_value=f"s3://{sagemaker_session.default_bucket()}/datasets/abalone/abalone.csv",
