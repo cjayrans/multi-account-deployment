@@ -165,7 +165,7 @@ def get_pipeline(
     )
     input_data = ParameterString(
         name="InputDataUrl",
-        default_value=f"s3://{sagemaker_session.default_bucket()}/datasets/abalone.csv",
+        default_value=f"s3://{sagemaker_session.default_bucket()}/datasets/abalone/abalone.csv",
 
     )
 
