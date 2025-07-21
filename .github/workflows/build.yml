@@ -39,7 +39,7 @@ jobs:
           export SAGEMAKER_PROJECT_ARN=$PROJECT_ARN
           export SAGEMAKER_PROJECT_ID=$PROJECT
           export SAGEMAKER_PROJECT_NAME_ID="${{ env.SAGEMAKER_PROJECT_NAME }}-$PROJECT"
-          export ARTIFACT_BUCKET="sagemaker-project-github-$PROJECT-${{ env.AWS_REGION }}"
+          export ARTIFACT_BUCKET="sagemaker-us-east-1-769265885190"
           export SAGEMAKER_PIPELINE_ROLE_ARN="arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):role/service-role/AmazonSageMakerServiceCatalogProductsUseRole"
 
           run-pipeline \

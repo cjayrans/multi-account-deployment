@@ -169,7 +169,6 @@ def get_pipeline(
         default_value=f"s3://{sagemaker_session.default_bucket()}/datasets/abalone/abalone.csv",
 
     )
-
     # processing step for feature engineering
     sklearn_processor = SKLearnProcessor(
         framework_version="0.23-1",
