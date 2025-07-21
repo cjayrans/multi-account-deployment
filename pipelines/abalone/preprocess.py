@@ -73,8 +73,8 @@ if __name__ == "__main__":
     logger.debug("Reading downloaded data.")
     df = pd.read_csv(
         fn,
-        header=None,
-        names=feature_columns_names + [label_column],
+        header=0,
+        # names=feature_columns_names + [label_column],
         dtype=merge_two_dicts(feature_columns_dtype, label_column_dtype),
     )
     os.unlink(fn)
