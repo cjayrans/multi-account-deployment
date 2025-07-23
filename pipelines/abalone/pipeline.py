@@ -32,6 +32,7 @@ from sagemaker.workflow.condition_step import (
 )
 from sagemaker.workflow.functions import (
     JsonGet,
+    Join,
 )
 from sagemaker.workflow.parameters import (
     ParameterInteger,
