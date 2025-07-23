@@ -285,12 +285,24 @@ def get_pipeline(
         role=role,
     )
 
-    model_bucket_key = f"{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
+    # model_bucket_key = f"{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
+
+    model_artifact = Join(
+        on="/",
+        values=[
+            f"s3://{sagemaker_session.default_bucket()}",
+            base_job_prefix,
+            "AbaloneTrain",
+            tuning_step.properties.BestTrainingJob.TrainingJobName,
+            "output",
+            "model.tar.gz",
+        ],
+    )
 
     step_args = script_eval.run(
         inputs=[
             ProcessingInput(
-                source=tuning_step.get_top_model_s3_uri(top_k=0, s3_bucket=model_bucket_key),
+                source=model_artifact,
                 destination="/opt/ml/processing/model",
             ),
             ProcessingInput(
@@ -327,7 +339,7 @@ def get_pipeline(
 
     model = Model(
         image_uri=image_uri,
-        model_data=tuning_step.get_top_model_s3_uri(top_k=0, s3_bucket=model_bucket_key),
+        model_data=model_artifact,
         sagemaker_session=pipeline_session,
         role=role,
     )
