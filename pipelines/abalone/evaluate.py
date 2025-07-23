@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import xgboost
 
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, root_mean_squared_error
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -38,13 +38,13 @@ if __name__ == "__main__":
     logger.info("Performing predictions against test data.")
     predictions = model.predict(X_test)
 
-    logger.debug("Calculating mean squared error.")
-    mse = mean_squared_error(y_test, predictions)
+    logger.debug("Calculating root mean squared error.")
+    rmse = root_mean_squared_error(y_test, predictions)
     std = np.std(y_test - predictions)
     report_dict = {
         "regression_metrics": {
-            "mse": {
-                "value": mse,
+            "rmse": {
+                "value": rmse,
                 "standard_deviation": std
             },
         },
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     output_dir = "/opt/ml/processing/evaluation"
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    logger.info("Writing out evaluation report with mse: %f", mse)
+    logger.info("Writing out evaluation report with rmse: %f", rmse)
     evaluation_path = f"{output_dir}/evaluation.json"
     with open(evaluation_path, "w") as f:
         f.write(json.dumps(report_dict))
