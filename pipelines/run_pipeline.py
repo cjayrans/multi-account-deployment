@@ -94,7 +94,25 @@ def main():  # pragma: no cover
         # Setting the attempts and delay (in seconds) will modify the overall time the pipeline waits. 
         # If the execution is taking a longer time, update these parameters to a larger value.
         # Eg: The total wait time is calculated as 60 * 120 = 7200 seconds (2 hours)
-        execution.wait(max_attempts=120, delay=60)
+        # execution.wait(max_attempts=120, delay=60)
+
+        try:
+            execution.wait(max_attempts=120, delay=60)
+            print("\n✅ Pipeline completed successfully")
+        except Exception as e:
+            print(f"\n❌ Pipeline wait failed: {e}\n")
+            # DEBUG BLOCK
+            desc = execution.describe()
+            print("PipelineExecutionStatus:", desc.get("PipelineExecutionStatus"))
+            print("Pipeline FailureReason:", desc.get("FailureReason"))
+            print("\nStep Details:\n")
+            for step in execution.list_steps():
+                print(f"StepName: {step['StepName']}")
+                print(f"  Status: {step['StepStatus']}")
+                if "FailureReason" in step:
+                    print(f"  FailureReason: {step['FailureReason']}")
+                print("-" * 30)
+            sys.exit(1)
         
         print("\n#####Execution completed. Execution step details:")
 
