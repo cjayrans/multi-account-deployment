@@ -42,10 +42,12 @@ from sagemaker.workflow.properties import PropertyFile
 from sagemaker.workflow.steps import (
     ProcessingStep,
     TrainingStep,
+    TuningStep,
 )
 from sagemaker.workflow.model_step import ModelStep
 from sagemaker.model import Model
 from sagemaker.workflow.pipeline_context import PipelineSession
+from sagemaker.tuner import ContinuousParameter, HyperparameterTuner, IntegerParameter
 
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -210,17 +212,52 @@ def get_pipeline(
         sagemaker_session=pipeline_session,
         role=role,
     )
+    # xgb_train.set_hyperparameters(
+    #     objective="reg:linear",
+    #     num_round=50,
+    #     max_depth=5,
+    #     eta=0.2,
+    #     gamma=4,
+    #     min_child_weight=6,
+    #     subsample=0.7,
+    #     silent=0,
+    # )
+
+
+    ##################### NEW LOGIC BEGINS ##########################################
     xgb_train.set_hyperparameters(
         objective="reg:linear",
         num_round=50,
-        max_depth=5,
-        eta=0.2,
-        gamma=4,
-        min_child_weight=6,
         subsample=0.7,
-        silent=0,
+        gamma=4,
     )
-    step_args = xgb_train.fit(
+
+    hp_ranges = {
+        "eta": ContinuousParameter(0.01, 0.3),
+        "max_depth": IntegerParameter(3, 10),
+        "min_child_weight": ContinuousParameter(0, 10),
+        # "subsample": ContinuousParameter(0.5, 1.0),
+        # "colsample_bytree": ContinuousParameter(0.5, 1.0),
+        # "gamma": ContinuousParameter(0, 5),
+        # "lambda": ContinuousParameter(0, 10),
+        # "alpha": ContinuousParameter(0, 10),
+    }
+
+    objective_metric_name = "validation:rmse"
+
+    tuner = HyperparameterTuner(
+        estimator=xgb_train,
+        objective_metric_name=objective_metric_name,  # or your chosen metric
+        hyperparameter_ranges=hp_ranges,
+        strategy="Bayesian",
+        objective_type="Minimize",
+        max_jobs=20,
+        max_parallel_jobs=4,
+    )
+
+    tuning_step = TuningStep(
+        name="BayesianTuning",
+        tuner=tuner,
         inputs={
             "train": TrainingInput(
                 s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
@@ -234,14 +271,10 @@ def get_pipeline(
                 ].S3Output.S3Uri,
                 content_type="text/csv",
             ),
-        },
-    )
-    step_train = TrainingStep(
-        name="TrainAbaloneModel",
-        step_args=step_args,
+        }
     )
 
-    # processing step for evaluation
+    ### ScriptProcessor for Evaluation
     script_eval = ScriptProcessor(
         image_uri=image_uri,
         command=["python3"],
@@ -251,16 +284,15 @@ def get_pipeline(
         sagemaker_session=pipeline_session,
         role=role,
     )
+
     step_args = script_eval.run(
         inputs=[
             ProcessingInput(
-                source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+                source=tuning_step.get_top_model_s3_uri(),
                 destination="/opt/ml/processing/model",
             ),
             ProcessingInput(
-                source=step_process.properties.ProcessingOutputConfig.Outputs[
-                    "test"
-                ].S3Output.S3Uri,
+                source=step_process.properties.ProcessingOutputConfig.Outputs["test"].S3Output.S3Uri,
                 destination="/opt/ml/processing/test",
             ),
         ],
@@ -269,63 +301,64 @@ def get_pipeline(
         ],
         code=os.path.join(BASE_DIR, "evaluate.py"),
     )
+
     evaluation_report = PropertyFile(
         name="AbaloneEvaluationReport",
         output_name="evaluation",
         path="evaluation.json",
     )
+
     step_eval = ProcessingStep(
         name="EvaluateAbaloneModel",
         step_args=step_args,
         property_files=[evaluation_report],
     )
 
-    # register model step that will be conditionally executed
     model_metrics = ModelMetrics(
         model_statistics=MetricsSource(
             s3_uri="{}/evaluation.json".format(
                 step_eval.arguments["ProcessingOutputConfig"]["Outputs"][0]["S3Output"]["S3Uri"]
             ),
-            content_type="application/json"
+            content_type="application/json",
         )
     )
+
     model = Model(
         image_uri=image_uri,
-        model_data=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+        model_data=tuning_step.get_top_model_s3_uri(),
         sagemaker_session=pipeline_session,
         role=role,
     )
-    step_args = model.register(
-        content_types=["text/csv"],
-        response_types=["text/csv"],
-        inference_instances=["ml.t2.medium", "ml.m5.large"],
-        transform_instances=["ml.m5.large"],
-        model_package_group_name=model_package_group_name,
-        approval_status=model_approval_status,
-        model_metrics=model_metrics,
-    )
+
     step_register = ModelStep(
-        name="RegisterAbaloneModel",
-        step_args=step_args,
+        name="RegisterBestModel",
+        step_args=model.register(
+            content_types=["text/csv"],
+            response_types=["text/csv"],
+            inference_instances=["ml.t2.medium", "ml.m5.large"],
+            transform_instances=["ml.m5.large"],
+            model_package_group_name=model_package_group_name,
+            approval_status=model_approval_status,
+            model_metrics=model_metrics,
+        ),
     )
 
-    # condition step for evaluating model quality and branching execution
     cond_lte = ConditionLessThanOrEqualTo(
         left=JsonGet(
             step_name=step_eval.name,
             property_file=evaluation_report,
-            json_path="regression_metrics.mse.value"
+            json_path="regression_metrics.rmse.value",
         ),
-        right=6.0,
+        right=0.4,  # <-- Adjust threshold based on expected performance
     )
+
     step_cond = ConditionStep(
-        name="CheckMSEAbaloneEvaluation",
+        name="CheckAbaloneEvaluation",
         conditions=[cond_lte],
         if_steps=[step_register],
         else_steps=[],
     )
 
-    # pipeline instance
     pipeline = Pipeline(
         name=pipeline_name,
         parameters=[
@@ -335,7 +368,242 @@ def get_pipeline(
             model_approval_status,
             input_data,
         ],
-        steps=[step_process, step_train, step_eval, step_cond],
+        steps=[
+            step_process,
+            tuning_step,
+            step_eval,
+            step_cond,
+        ],
         sagemaker_session=pipeline_session,
     )
     return pipeline
+
+
+
+
+
+
+
+
+    # best_estimator = tuner.attach(tuner.latest_tuning_job.name).best_estimator()
+    #
+    # best_model = Model(
+    #     image_uri=image_uri,
+    #     model_data=best_estimator.model_data,
+    #     sagemaker_session=pipeline_session,
+    #     role=role,
+    # )
+    #
+    # step_register = ModelStep(
+    #     name="RegisterBestModel",
+    #     step_args=best_model.register(
+    #         content_types=["text/csv"],
+    #         response_types=["text/csv"],
+    #         inference_instances=["ml.t2.medium", "ml.m5.large"],
+    #         transform_instances=["ml.m5.large"],
+    #         model_package_group_name=model_package_group_name,
+    #         approval_status=model_approval_status,
+    #         model_metrics=ModelMetrics(
+    #             model_statistics=MetricsSource(
+    #                 s3_uri="{}/evaluation.json".format(
+    #                     step_eval.arguments["ProcessingOutputConfig"]["Outputs"][0]["S3Output"]["S3Uri"]
+    #                 ),
+    #                 content_type="application/json"
+    #             )
+    #         ),
+    #     ),
+    # )
+    #
+    # # processing step for evaluation
+    # script_eval = ScriptProcessor(
+    #     image_uri=image_uri,
+    #     command=["python3"],
+    #     instance_type=processing_instance_type,
+    #     instance_count=1,
+    #     base_job_name=f"{base_job_prefix}/script-abalone-eval",
+    #     sagemaker_session=pipeline_session,
+    #     role=role,
+    # )
+    #
+    # step_args = script_eval.run(
+    #     inputs=[
+    #         ProcessingInput(
+    #             source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+    #             destination="/opt/ml/processing/model",
+    #         ),
+    #         ProcessingInput(
+    #             source=step_process.properties.ProcessingOutputConfig.Outputs[
+    #                 "test"
+    #             ].S3Output.S3Uri,
+    #             destination="/opt/ml/processing/test",
+    #         ),
+    #     ],
+    #     outputs=[
+    #         ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
+    #     ],
+    #     code=os.path.join(BASE_DIR, "evaluate.py"),
+    # )
+    #
+    # evaluation_report = PropertyFile(
+    #     name="AbaloneEvaluationReport",
+    #     output_name="evaluation",
+    #     path="evaluation.json",
+    # )
+    #
+    # step_eval = ProcessingStep(
+    #     name="EvaluateAbaloneModel",
+    #     step_args=step_args,
+    #     property_files=[evaluation_report],
+    # )
+    #
+    # # condition step for evaluating model quality and branching execution
+    # cond_lte = ConditionLessThanOrEqualTo(
+    #     left=JsonGet(
+    #         step_name=step_eval.name,
+    #         property_file=evaluation_report,
+    #         json_path="regression_metrics.mse.value"
+    #     ),
+    #     right=6.0,
+    # )
+    # step_cond = ConditionStep(
+    #     name="CheckMSEAbaloneEvaluation",
+    #     conditions=[cond_lte],
+    #     if_steps=[step_register],
+    #     else_steps=[],
+    # )
+    #
+    # pipeline = Pipeline(
+    #     name=pipeline_name,
+    #     parameters=[processing_instance_type,
+    #                 processing_instance_count,
+    #                 training_instance_type,
+    #                 model_approval_status,
+    #                 input_data
+    #                 ],
+    #     steps=[step_process, tuning_step, step_eval, step_register, step_cond],
+    #     sagemaker_session=pipeline_session,
+    # )
+
+
+##################### NEW LOGIC ENDS ##########################################
+##################### OLD LOGIC BELOW ##########################################
+    # step_args = xgb_train.fit(
+    #     inputs={
+    #         "train": TrainingInput(
+    #             s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
+    #                 "train"
+    #             ].S3Output.S3Uri,
+    #             content_type="text/csv",
+    #         ),
+    #         "validation": TrainingInput(
+    #             s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
+    #                 "validation"
+    #             ].S3Output.S3Uri,
+    #             content_type="text/csv",
+    #         ),
+    #     },
+    # )
+
+    # step_train = TrainingStep(
+    #     name="TrainAbaloneModel",
+    #     step_args=step_args,
+    # )
+
+    # processing step for evaluation
+    # script_eval = ScriptProcessor(
+    #     image_uri=image_uri,
+    #     command=["python3"],
+    #     instance_type=processing_instance_type,
+    #     instance_count=1,
+    #     base_job_name=f"{base_job_prefix}/script-abalone-eval",
+    #     sagemaker_session=pipeline_session,
+    #     role=role,
+    # )
+    # step_args = script_eval.run(
+    #     inputs=[
+    #         ProcessingInput(
+    #             source=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+    #             destination="/opt/ml/processing/model",
+    #         ),
+    #         ProcessingInput(
+    #             source=step_process.properties.ProcessingOutputConfig.Outputs[
+    #                 "test"
+    #             ].S3Output.S3Uri,
+    #             destination="/opt/ml/processing/test",
+    #         ),
+    #     ],
+    #     outputs=[
+    #         ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
+    #     ],
+    #     code=os.path.join(BASE_DIR, "evaluate.py"),
+    # )
+    # evaluation_report = PropertyFile(
+    #     name="AbaloneEvaluationReport",
+    #     output_name="evaluation",
+    #     path="evaluation.json",
+    # )
+    # step_eval = ProcessingStep(
+    #     name="EvaluateAbaloneModel",
+    #     step_args=step_args,
+    #     property_files=[evaluation_report],
+    # )
+
+    # # register model step that will be conditionally executed
+    # model_metrics = ModelMetrics(
+    #     model_statistics=MetricsSource(
+    #         s3_uri="{}/evaluation.json".format(
+    #             step_eval.arguments["ProcessingOutputConfig"]["Outputs"][0]["S3Output"]["S3Uri"]
+    #         ),
+    #         content_type="application/json"
+    #     )
+    # )
+    # model = Model(
+    #     image_uri=image_uri,
+    #     model_data=step_train.properties.ModelArtifacts.S3ModelArtifacts,
+    #     sagemaker_session=pipeline_session,
+    #     role=role,
+    # )
+    # step_args = model.register(
+    #     content_types=["text/csv"],
+    #     response_types=["text/csv"],
+    #     inference_instances=["ml.t2.medium", "ml.m5.large"],
+    #     transform_instances=["ml.m5.large"],
+    #     model_package_group_name=model_package_group_name,
+    #     approval_status=model_approval_status,
+    #     model_metrics=model_metrics,
+    # )
+    # step_register = ModelStep(
+    #     name="RegisterAbaloneModel",
+    #     step_args=step_args,
+    # )
+    #
+    # # condition step for evaluating model quality and branching execution
+    # cond_lte = ConditionLessThanOrEqualTo(
+    #     left=JsonGet(
+    #         step_name=step_eval.name,
+    #         property_file=evaluation_report,
+    #         json_path="regression_metrics.mse.value"
+    #     ),
+    #     right=6.0,
+    # )
+    # step_cond = ConditionStep(
+    #     name="CheckMSEAbaloneEvaluation",
+    #     conditions=[cond_lte],
+    #     if_steps=[step_register],
+    #     else_steps=[],
+    # )
+    #
+    # # pipeline instance
+    # pipeline = Pipeline(
+    #     name=pipeline_name,
+    #     parameters=[
+    #         processing_instance_type,
+    #         processing_instance_count,
+    #         training_instance_type,
+    #         model_approval_status,
+    #         input_data,
+    #     ],
+    #     steps=[step_process, step_train, step_eval, step_cond],
+    #     sagemaker_session=pipeline_session,
+    # )
+    # return pipeline
