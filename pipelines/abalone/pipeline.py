@@ -198,7 +198,11 @@ def get_pipeline(
     )
 
     # training step for generating model artifacts
-    model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
+    # model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
+    bucket = sagemaker_session.default_bucket()
+    # define your prefix explicitly
+    prefix = f"{base_job_prefix}/output"
+
     image_uri = sagemaker.image_uris.retrieve(
         framework="xgboost",
         region=region,
@@ -210,7 +214,7 @@ def get_pipeline(
         image_uri=image_uri,
         instance_type=training_instance_type,
         instance_count=1,
-        output_path=model_path,
+        output_path=f"s3://{bucket}/{prefix}",# model_path,
         base_job_name=f"{base_job_prefix}/abalone-train",
         sagemaker_session=pipeline_session,
         role=role,
@@ -298,8 +302,8 @@ def get_pipeline(
     )
 
     # Fetch best model artifact from tuning step
-    bucket = sagemaker_session.default_bucket()
-    prefix = f"{base_job_prefix}/AbaloneTrain"
+    # bucket = sagemaker_session.default_bucket()
+    # prefix = f"{base_job_prefix}/AbaloneTrain"
     top_model_s3_uri = tuning_step.get_top_model_s3_uri(
         top_k=0,
         s3_bucket=bucket,
