@@ -233,7 +233,7 @@ def get_pipeline(
     xgb_train.set_hyperparameters(
         eval_metric="rmse",
         objective="reg:squarederror",  # Define the object metric for the training job
-        num_round=50,
+        num_round=25,
         gamma=4,
         subsample=0.7,
         silent=0,
@@ -267,8 +267,8 @@ def get_pipeline(
         hyperparameter_ranges=hp_ranges,
         strategy="Bayesian",
         objective_type="Minimize",
-        max_jobs=20,
-        max_parallel_jobs=4,
+        max_jobs=5,
+        max_parallel_jobs=5,
     )
 
     # LATEST VERSION
@@ -288,9 +288,21 @@ def get_pipeline(
     )
 
     # LATEST VERSION
-    step_tuning = TuningStep(
+    tuning_step = TuningStep(
         name="BayesianTuning",
         step_args=hpo_args
+    )
+
+    best_model = Model(
+        model_data=Join(
+            on="/",
+            values=[
+                f"s3://{bucket}/{model_prefix}",
+                # from DescribeHyperParameterTuningJob
+                step_tune.properties.BestTrainingJob.TrainingJobName,
+                "output/model.tar.gz",
+            ],
+        )
     )
     # # PREVIOUS VERSION
     # tuning_step = TuningStep(
