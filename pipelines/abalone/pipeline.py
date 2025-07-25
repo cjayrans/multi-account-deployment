@@ -51,6 +51,8 @@ from sagemaker.workflow.pipeline_context import PipelineSession
 from sagemaker.tuner import ContinuousParameter, HyperparameterTuner, IntegerParameter
 
 
+
+
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def get_default_bucket(region):
@@ -276,9 +278,18 @@ def get_pipeline(
     )
 
     ### ScriptProcessor for Evaluation
-    script_eval = ScriptProcessor(
-        image_uri=image_uri,
-        command=["python3"],
+    # script_eval = ScriptProcessor(
+    #     image_uri=image_uri,
+    #     command=["python3"],
+    #     instance_type=processing_instance_type,
+    #     instance_count=1,
+    #     base_job_name=f"{base_job_prefix}/script-abalone-eval",
+    #     sagemaker_session=pipeline_session,
+    #     role=role,
+    # )
+
+    script_eval = SKLearnProcessor(
+        framework_version="0.23-1",  # or another supported version
         instance_type=processing_instance_type,
         instance_count=1,
         base_job_name=f"{base_job_prefix}/script-abalone-eval",
@@ -286,7 +297,16 @@ def get_pipeline(
         role=role,
     )
 
-    model_bucket_key = f"{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
+    # Fetch best model artifact from tuning step
+    bucket = sagemaker_session.default_bucket()
+    prefix = f"{base_job_prefix}/AbaloneTrain"
+    top_model_s3_uri = tuning_step.get_top_model_s3_uri(
+        top_k=0,
+        s3_bucket=bucket,
+        prefix=prefix,
+    )
+
+    # model_bucket_key = f"{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
 
     # model_artifact = Join(
     #     on="/",
@@ -299,13 +319,13 @@ def get_pipeline(
     #         "model.tar.gz",
     #     ],
     # )
-    model_prefix = f"{base_job_prefix}/AbaloneTrain"
-
-    top_model_s3_uri = tuning_step.get_top_model_s3_uri(
-        top_k=0,
-        s3_bucket=sagemaker_session.default_bucket(),
-        prefix=model_prefix,
-    )
+    # model_prefix = f"{base_job_prefix}/AbaloneTrain"
+    #
+    # top_model_s3_uri = tuning_step.get_top_model_s3_uri(
+    #     top_k=0,
+    #     s3_bucket=sagemaker_session.default_bucket(),
+    #     prefix=model_prefix,
+    # )
 
     step_args = script_eval.run(
         inputs=[
@@ -338,9 +358,9 @@ def get_pipeline(
 
     model_metrics = ModelMetrics(
         model_statistics=MetricsSource(
-            s3_uri="{}/evaluation.json".format(
-                step_eval.arguments["ProcessingOutputConfig"]["Outputs"][0]["S3Output"]["S3Uri"]
-            ),
+            s3_uri=f"{step_eval.arguments['ProcessingOutputConfig']['Outputs'][0]['S3Output']['S3Uri']}/evaluation.json", #"{}/evaluation.json".format(
+                #step_eval.arguments["ProcessingOutputConfig"]["Outputs"][0]["S3Output"]["S3Uri"]
+            #),
             content_type="application/json",
         )
     )
