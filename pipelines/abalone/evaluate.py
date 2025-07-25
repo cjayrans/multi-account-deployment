@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import xgboost
 
-from sklearn.metrics import mean_squared_error, root_mean_squared_error
+from sklearn.metrics import mean_squared_error
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -54,7 +54,9 @@ if __name__ == "__main__":
 
         # 6) Compute RMSE
         logger.debug("Calculating root mean squared error.")
-        rmse = root_mean_squared_error(y_test, predictions)
+        # rmse = root_mean_squared_error(y_test, predictions)
+        rmse = np.sqrt(mean_squared_error(y_test, predictions))
+
         std = np.std(y_test - predictions)
         logger.info("Computed RMSE = %f, STD = %f", rmse, std)
         report_dict = {
