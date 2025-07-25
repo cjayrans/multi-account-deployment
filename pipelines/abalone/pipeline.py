@@ -100,28 +100,42 @@ def get_session(region, default_bucket=None):
         default_bucket=default_bucket,
     )
 
+# def get_pipeline_session(region, default_bucket=None):
+#     """Gets the pipeline session based on the region.
+#
+#     Args:
+#         region: the aws region to start the session
+#         default_bucket: the bucket to use for storing the artifacts
+#
+#     Returns:
+#         PipelineSession instance
+#     """
+#
+#     boto_session = boto3.Session(region_name=region)
+#     sagemaker_client = boto_session.client("sagemaker")
+#
+#     if default_bucket is None:
+#         default_bucket = get_default_bucket(region)
+#
+#     return PipelineSession(
+#         boto_session=boto_session,
+#         sagemaker_client=sagemaker_client,
+#         default_bucket=default_bucket,
+#     )
+
 def get_pipeline_session(region, default_bucket=None):
-    """Gets the pipeline session based on the region.
-
-    Args:
-        region: the aws region to start the session
-        default_bucket: the bucket to use for storing the artifacts
-
-    Returns:
-        PipelineSession instance
-    """
-
     boto_session = boto3.Session(region_name=region)
     sagemaker_client = boto_session.client("sagemaker")
-
+    runtime_client   = boto_session.client("sagemaker-runtime")
     if default_bucket is None:
         default_bucket = get_default_bucket(region)
-
-    return PipelineSession(
+    return sagemaker.session.Session(
         boto_session=boto_session,
         sagemaker_client=sagemaker_client,
+        sagemaker_runtime_client=runtime_client,
         default_bucket=default_bucket,
     )
+
 
 def get_pipeline_custom_tags(new_tags, region, sagemaker_project_arn=None):
     try:
@@ -339,125 +353,6 @@ def get_pipeline(
         step_args=eval_args,
         property_files=[evaluation_report],
     )
-
-
-# JUST COMMENTED OUT
-    # bucket = sagemaker_session.default_bucket() # PREVIOUS VERSION
-    # model_prefix = "Abalone" # PREVIOUS VERSION
-    #
-    # best_model = Model(
-    #     model_data=Join(
-    #         on="/",
-    #         values=[
-    #             f"s3://{bucket}/{model_prefix}",
-    #             # from DescribeHyperParameterTuningJob
-    #             tuning_step.properties.BestTrainingJob.TrainingJobName,
-    #             "output/model.tar.gz",
-    #         ],
-    #     )
-    # )
-
-    # # PREVIOUS VERSION
-    # tuning_step = TuningStep(
-    #     name="BayesianTuning",
-    #     tuner=tuner,
-    #     inputs={
-    #         "train": TrainingInput(
-    #             s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
-    #                 "train"
-    #             ].S3Output.S3Uri,
-    #             content_type="text/csv",
-    #         ),
-    #         "validation": TrainingInput(
-    #             s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
-    #                 "validation"
-    #             ].S3Output.S3Uri,
-    #             content_type="text/csv",
-    #         ),
-    #     }
-    # )
-
-    ### ScriptProcessor for Evaluation
-    # script_eval = ScriptProcessor(
-    #     image_uri=image_uri,
-    #     command=["python3"],
-    #     instance_type=processing_instance_type,
-    #     instance_count=1,
-    #     base_job_name=f"{base_job_prefix}/script-abalone-eval",
-    #     sagemaker_session=pipeline_session,
-    #     role=role,
-    # )
-
-    # JUST COMMENTED OUT
-    # script_eval = SKLearnProcessor(
-    #     framework_version="0.23-1",  # or another supported version
-    #     instance_type=processing_instance_type,
-    #     instance_count=1,
-    #     base_job_name=f"{base_job_prefix}/script-abalone-eval",
-    #     sagemaker_session=pipeline_session,
-    #     role=role,
-    # )
-
-    # Fetch best model artifact from tuning step
-    # bucket = sagemaker_session.default_bucket()
-    # prefix = f"{base_job_prefix}/AbaloneTrain"
-    # PREVIOUS VERSION
-    # top_model_s3_uri = tuning_step.get_top_model_s3_uri(
-    #     top_k=0,
-    #     s3_bucket=bucket,
-    #     prefix=prefix,
-    # )
-
-    # model_bucket_key = f"{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
-
-    # model_artifact = Join(
-    #     on="/",
-    #     values=[
-    #         f"s3://{sagemaker_session.default_bucket()}",
-    #         base_job_prefix,
-    #         "AbaloneTrain",
-    #         tuning_step.properties.BestTrainingJob.TrainingJobName,
-    #         "output",
-    #         "model.tar.gz",
-    #     ],
-    # )
-    # model_prefix = f"{base_job_prefix}/AbaloneTrain"
-    #
-    # top_model_s3_uri = tuning_step.get_top_model_s3_uri(
-    #     top_k=0,
-    #     s3_bucket=sagemaker_session.default_bucket(),
-    #     prefix=model_prefix,
-    # )
-
-    # # JUST COMMENTED OUT
-    # step_args = script_eval.run(
-    #     inputs=[
-    #         ProcessingInput(
-    #             source=best_model, #top_model_s3_uri, #PREVIOUS VERSION
-    #             destination="/opt/ml/processing/model",
-    #         ),
-    #         ProcessingInput(
-    #             source=step_process.properties.ProcessingOutputConfig.Outputs["test"].S3Output.S3Uri,
-    #             destination="/opt/ml/processing/test",
-    #         ),
-    #     ],
-    #     outputs=[
-    #         ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
-    #     ],
-    #     code=os.path.join(BASE_DIR, "evaluate.py"),
-    # )
-    # # JUST COMMENTED OUT
-    # evaluation_report = PropertyFile(
-    #     name="AbaloneEvaluationReport",
-    #     output_name="evaluation",
-    #     path="evaluation.json",
-    # )
-    # JUST COMMENTED OUT
-    # step_eval = ProcessingStep(
-    #     name="EvaluateAbaloneModel",
-    #     step_args=step_args,
-    #     property_files=[evaluation_report],
-    # )
 
     model_metrics = ModelMetrics(
         model_statistics=MetricsSource(
