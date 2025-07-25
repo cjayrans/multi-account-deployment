@@ -100,41 +100,41 @@ def get_session(region, default_bucket=None):
         default_bucket=default_bucket,
     )
 
-# def get_pipeline_session(region, default_bucket=None):
-#     """Gets the pipeline session based on the region.
-#
-#     Args:
-#         region: the aws region to start the session
-#         default_bucket: the bucket to use for storing the artifacts
-#
-#     Returns:
-#         PipelineSession instance
-#     """
-#
-#     boto_session = boto3.Session(region_name=region)
-#     sagemaker_client = boto_session.client("sagemaker")
-#
-#     if default_bucket is None:
-#         default_bucket = get_default_bucket(region)
-#
-#     return PipelineSession(
-#         boto_session=boto_session,
-#         sagemaker_client=sagemaker_client,
-#         default_bucket=default_bucket,
-#     )
-
 def get_pipeline_session(region, default_bucket=None):
+    """Gets the pipeline session based on the region.
+
+    Args:
+        region: the aws region to start the session
+        default_bucket: the bucket to use for storing the artifacts
+
+    Returns:
+        PipelineSession instance
+    """
+
     boto_session = boto3.Session(region_name=region)
     sagemaker_client = boto_session.client("sagemaker")
-    runtime_client   = boto_session.client("sagemaker-runtime")
+
     if default_bucket is None:
         default_bucket = get_default_bucket(region)
-    return sagemaker.session.Session(
+
+    return PipelineSession(
         boto_session=boto_session,
         sagemaker_client=sagemaker_client,
-        sagemaker_runtime_client=runtime_client,
         default_bucket=default_bucket,
     )
+
+# def get_pipeline_session(region, default_bucket=None):
+#     boto_session = boto3.Session(region_name=region)
+#     sagemaker_client = boto_session.client("sagemaker")
+#     runtime_client   = boto_session.client("sagemaker-runtime")
+#     if default_bucket is None:
+#         default_bucket = get_default_bucket(region)
+#     return sagemaker.session.Session(
+#         boto_session=boto_session,
+#         sagemaker_client=sagemaker_client,
+#         sagemaker_runtime_client=runtime_client,
+#         default_bucket=default_bucket,
+#     )
 
 
 def get_pipeline_custom_tags(new_tags, region, sagemaker_project_arn=None):
