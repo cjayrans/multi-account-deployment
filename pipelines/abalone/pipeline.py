@@ -198,10 +198,10 @@ def get_pipeline(
     )
 
     # training step for generating model artifacts
-    # model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
-    bucket = sagemaker_session.default_bucket()
-    # define your prefix explicitly
-    prefix = f"{base_job_prefix}/output"
+    model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain" # LATEST VERSION
+    # bucket = sagemaker_session.default_bucket() # PREVIOUS VERSION
+    # # define your prefix explicitly # PREVIOUS VERSION
+    # prefix = f"{base_job_prefix}/output" # PREVIOUS VERSION
 
     image_uri = sagemaker.image_uris.retrieve(
         framework="xgboost",
@@ -214,30 +214,39 @@ def get_pipeline(
         image_uri=image_uri,
         instance_type=training_instance_type,
         instance_count=1,
-        output_path=f"s3://{bucket}/{prefix}",# model_path,
+        # output_path=f"s3://{bucket}/{prefix}",# PREVIOUS VERSION
+        output_path=model_path, # LATEST VERSION
         base_job_name=f"{base_job_prefix}/abalone-train",
         sagemaker_session=pipeline_session,
         role=role,
     )
+    ## PREVIOUS VERSION
     # xgb_train.set_hyperparameters(
     #     objective="reg:linear",
     #     num_round=50,
-    #     max_depth=5,
-    #     eta=0.2,
     #     gamma=4,
-    #     min_child_weight=6,
     #     subsample=0.7,
     #     silent=0,
     # )
 
+    # LATEST VERSION
+    xgb_train.set_hyperparameters(
+        eval_metric="rmse",
+        objective="reg:squarederror",  # Define the object metric for the training job
+        num_round=50,
+        gamma=4,
+        subsample=0.7,
+        silent=0,
+    )
+
 
     ##################### NEW LOGIC BEGINS ##########################################
-    xgb_train.set_hyperparameters(
-        objective="reg:linear",
-        num_round=50,
-        subsample=0.7,
-        gamma=4,
-    )
+    # xgb_train.set_hyperparameters(  # PREVIOUS VERSION
+    #     objective="reg:linear",
+    #     num_round=50,
+    #     subsample=0.7,
+    #     gamma=4,
+    # )
 
     hp_ranges = {
         "eta": ContinuousParameter(0.01, 0.3),
@@ -262,14 +271,11 @@ def get_pipeline(
         max_parallel_jobs=4,
     )
 
-    tuning_step = TuningStep(
-        name="BayesianTuning",
-        tuner=tuner,
+    # LATEST VERSION
+    hpo_args = tuner.fit(
         inputs={
             "train": TrainingInput(
-                s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
-                    "train"
-                ].S3Output.S3Uri,
+                s3_data=step_process.properties.ProcessingOutputConfig.Outputs["train"].S3Output.S3Uri,
                 content_type="text/csv",
             ),
             "validation": TrainingInput(
@@ -280,6 +286,31 @@ def get_pipeline(
             ),
         }
     )
+
+    # LATEST VERSION
+    step_tuning = TuningStep(
+        name="BayesianTuning",
+        step_args=hpo_args
+    )
+    # # PREVIOUS VERSION
+    # tuning_step = TuningStep(
+    #     name="BayesianTuning",
+    #     tuner=tuner,
+    #     inputs={
+    #         "train": TrainingInput(
+    #             s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
+    #                 "train"
+    #             ].S3Output.S3Uri,
+    #             content_type="text/csv",
+    #         ),
+    #         "validation": TrainingInput(
+    #             s3_data=step_process.properties.ProcessingOutputConfig.Outputs[
+    #                 "validation"
+    #             ].S3Output.S3Uri,
+    #             content_type="text/csv",
+    #         ),
+    #     }
+    # )
 
     ### ScriptProcessor for Evaluation
     # script_eval = ScriptProcessor(
