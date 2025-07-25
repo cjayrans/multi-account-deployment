@@ -198,10 +198,8 @@ def get_pipeline(
     )
 
     # training step for generating model artifacts
-    model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain" # LATEST VERSION
-    # bucket = sagemaker_session.default_bucket() # PREVIOUS VERSION
-    # # define your prefix explicitly # PREVIOUS VERSION
-    # prefix = f"{base_job_prefix}/output" # PREVIOUS VERSION
+    model_path = f"s3://{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain" # PREVIOUS VERSION
+    model_prefix = f"{base_job_prefix}/AbaloneTrain"
 
     image_uri = sagemaker.image_uris.retrieve(
         framework="xgboost",
@@ -216,7 +214,7 @@ def get_pipeline(
         instance_count=1,
         # output_path=f"s3://{bucket}/{prefix}",# PREVIOUS VERSION
         output_path=model_path, # LATEST VERSION
-        base_job_name=f"{base_job_prefix}/abalone-train",
+        base_job_name=f"{base_job_prefix}/train",
         sagemaker_session=pipeline_session,
         role=role,
     )
@@ -293,17 +291,72 @@ def get_pipeline(
         step_args=hpo_args
     )
 
-    best_model = Model(
-        model_data=Join(
-            on="/",
-            values=[
-                f"s3://{bucket}/{model_prefix}",
-                # from DescribeHyperParameterTuningJob
-                step_tune.properties.BestTrainingJob.TrainingJobName,
-                "output/model.tar.gz",
-            ],
-        )
+    script_eval = ScriptProcessor(
+        image_uri=image_uri,
+        command=["python3"],
+        instance_type=processing_instance_type,
+        instance_count=1,
+        base_job_name=f"{base_job_prefix}/evaluate",
+        sagemaker_session=pipeline_session,
+        role=role,
     )
+
+    evaluation_inputs = [
+        ProcessingInput(
+            source=tuning_step.get_top_model_s3_uri(
+                top_k=0, s3_bucket=default_bucket, prefix=model_prefix
+            ),
+            destination="/opt/ml/processing/model",
+        ),
+        ProcessingInput(
+            source=step_process.properties.ProcessingOutputConfig.Outputs[
+                "test"
+            ].S3Output.S3Uri,
+            destination="/opt/ml/processing/test",
+        ),
+    ]
+
+    evaluation_outputs = [
+        ProcessingOutput(
+            output_name="evaluation", source="/opt/ml/processing/evaluation"
+        ),
+    ]
+
+    evaluation_report = PropertyFile(
+        name="EvaluationReport",
+        output_name="evaluation",
+        path="evaluation.json",
+    )
+
+    eval_args = script_eval.run(
+        inputs=evaluation_inputs,
+        outputs=evaluation_outputs,
+        code=os.path.join(BASE_DIR, "evaluate.py"),
+    )
+
+    step_eval = ProcessingStep(
+        name="EvaluateModel",
+        step_args=eval_args,
+        property_files=[evaluation_report],
+    )
+
+
+# JUST COMMENTED OUT
+    # bucket = sagemaker_session.default_bucket() # PREVIOUS VERSION
+    # model_prefix = "Abalone" # PREVIOUS VERSION
+    #
+    # best_model = Model(
+    #     model_data=Join(
+    #         on="/",
+    #         values=[
+    #             f"s3://{bucket}/{model_prefix}",
+    #             # from DescribeHyperParameterTuningJob
+    #             tuning_step.properties.BestTrainingJob.TrainingJobName,
+    #             "output/model.tar.gz",
+    #         ],
+    #     )
+    # )
+
     # # PREVIOUS VERSION
     # tuning_step = TuningStep(
     #     name="BayesianTuning",
@@ -335,23 +388,25 @@ def get_pipeline(
     #     role=role,
     # )
 
-    script_eval = SKLearnProcessor(
-        framework_version="0.23-1",  # or another supported version
-        instance_type=processing_instance_type,
-        instance_count=1,
-        base_job_name=f"{base_job_prefix}/script-abalone-eval",
-        sagemaker_session=pipeline_session,
-        role=role,
-    )
+    # JUST COMMENTED OUT
+    # script_eval = SKLearnProcessor(
+    #     framework_version="0.23-1",  # or another supported version
+    #     instance_type=processing_instance_type,
+    #     instance_count=1,
+    #     base_job_name=f"{base_job_prefix}/script-abalone-eval",
+    #     sagemaker_session=pipeline_session,
+    #     role=role,
+    # )
 
     # Fetch best model artifact from tuning step
     # bucket = sagemaker_session.default_bucket()
     # prefix = f"{base_job_prefix}/AbaloneTrain"
-    top_model_s3_uri = tuning_step.get_top_model_s3_uri(
-        top_k=0,
-        s3_bucket=bucket,
-        prefix=prefix,
-    )
+    # PREVIOUS VERSION
+    # top_model_s3_uri = tuning_step.get_top_model_s3_uri(
+    #     top_k=0,
+    #     s3_bucket=bucket,
+    #     prefix=prefix,
+    # )
 
     # model_bucket_key = f"{sagemaker_session.default_bucket()}/{base_job_prefix}/AbaloneTrain"
 
@@ -374,34 +429,35 @@ def get_pipeline(
     #     prefix=model_prefix,
     # )
 
-    step_args = script_eval.run(
-        inputs=[
-            ProcessingInput(
-                source=top_model_s3_uri,
-                destination="/opt/ml/processing/model",
-            ),
-            ProcessingInput(
-                source=step_process.properties.ProcessingOutputConfig.Outputs["test"].S3Output.S3Uri,
-                destination="/opt/ml/processing/test",
-            ),
-        ],
-        outputs=[
-            ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
-        ],
-        code=os.path.join(BASE_DIR, "evaluate.py"),
-    )
-
-    evaluation_report = PropertyFile(
-        name="AbaloneEvaluationReport",
-        output_name="evaluation",
-        path="evaluation.json",
-    )
-
-    step_eval = ProcessingStep(
-        name="EvaluateAbaloneModel",
-        step_args=step_args,
-        property_files=[evaluation_report],
-    )
+    # # JUST COMMENTED OUT
+    # step_args = script_eval.run(
+    #     inputs=[
+    #         ProcessingInput(
+    #             source=best_model, #top_model_s3_uri, #PREVIOUS VERSION
+    #             destination="/opt/ml/processing/model",
+    #         ),
+    #         ProcessingInput(
+    #             source=step_process.properties.ProcessingOutputConfig.Outputs["test"].S3Output.S3Uri,
+    #             destination="/opt/ml/processing/test",
+    #         ),
+    #     ],
+    #     outputs=[
+    #         ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
+    #     ],
+    #     code=os.path.join(BASE_DIR, "evaluate.py"),
+    # )
+    # # JUST COMMENTED OUT
+    # evaluation_report = PropertyFile(
+    #     name="AbaloneEvaluationReport",
+    #     output_name="evaluation",
+    #     path="evaluation.json",
+    # )
+    # JUST COMMENTED OUT
+    # step_eval = ProcessingStep(
+    #     name="EvaluateAbaloneModel",
+    #     step_args=step_args,
+    #     property_files=[evaluation_report],
+    # )
 
     model_metrics = ModelMetrics(
         model_statistics=MetricsSource(
@@ -411,6 +467,10 @@ def get_pipeline(
             content_type="application/json",
         )
     )
+
+    top_model_s3_uri = tuning_step.get_top_model_s3_uri(
+                top_k=0, s3_bucket=default_bucket, prefix=model_prefix
+            )
 
     model = Model(
         image_uri=image_uri,
@@ -438,7 +498,7 @@ def get_pipeline(
             property_file=evaluation_report,
             json_path="regression_metrics.rmse.value",
         ),
-        right=0.4,  # <-- Adjust threshold based on expected performance
+        right=5.0,  # <-- Adjust threshold based on expected performance
     )
 
     step_cond = ConditionStep(
