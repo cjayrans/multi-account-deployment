@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup python 3.12
         uses: actions/setup-python@v4
@@ -26,7 +26,7 @@ jobs:
 
       - name: Configure AWS Credentials
         id: aws_creds
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -39,7 +39,7 @@ jobs:
             --sagemaker-project-name "$SAGEMAKER_PROJECT_NAME"
 
       - name: Store configs to artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: config-files
           path: |
@@ -77,14 +77,14 @@ jobs:
 
       - name: Configure AWS Credentials
         id: aws_creds
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Load configs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: config-files
 
