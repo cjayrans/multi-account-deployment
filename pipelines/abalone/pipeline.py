@@ -51,8 +51,6 @@ from sagemaker.workflow.pipeline_context import PipelineSession
 from sagemaker.tuner import ContinuousParameter, HyperparameterTuner, IntegerParameter
 
 
-
-
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def get_default_bucket(region):
